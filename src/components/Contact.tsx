@@ -1,243 +1,440 @@
-'use client';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { motion, useMotionValue, useTransform } from 'framer-motion';
+import { FiSend, FiCheckCircle, FiAlertCircle } from 'react-icons/fi';
+import SectionStars from './SectionStars';
 
-import React from 'react';
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-
-const Contact = () => {
+export default function Contact() {
   const [formData, setFormData] = useState({
     name: '',
     email: '',
-    message: '',
+    subject: '',
+    message: ''
   });
   
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [isSubmitted, setIsSubmitted] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
+  const [hoverField, setHoverField] = useState<string | null>(null);
+  const [isGridCreated, setIsGridCreated] = useState(false);
   
+  // For grid effect
+  const gridRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  
+  // Mouse tracking for subtle parallax effects - initialized to center
+  const mouseX = useMotionValue(0.5);
+  const mouseY = useMotionValue(0.5);
+  // Reduced motion range for stability
+  const formX = useTransform(mouseX, [0, 1], [-1.5, 1.5]);
+  const formY = useTransform(mouseY, [0, 1], [-1.5, 1.5]);
+  
+  // Debounced mouse movement handler
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!containerRef.current) return;
+    const { clientX, clientY } = e;
+    const bounds = containerRef.current.getBoundingClientRect();
+    
+    // Throttle the updates for better performance
+    // Only update if the mouse has moved significantly
+    const newX = (clientX - bounds.left) / bounds.width;
+    const newY = (clientY - bounds.top) / bounds.height;
+    
+    if (Math.abs(newX - mouseX.get()) > 0.03 || Math.abs(newY - mouseY.get()) > 0.03) {
+      mouseX.set(newX);
+      mouseY.set(newY);
+    }
+  }, [mouseX, mouseY]);
+
+  // Create cyberpunk grid effect - memoized with useCallback
+  const createGrid = useCallback(() => {
+    if (!gridRef.current || !containerRef.current || isGridCreated) return;
+    
+    const container = containerRef.current.getBoundingClientRect();
+    const width = container.width;
+    const height = container.height;
+    
+    // Clear previous grid
+    while (gridRef.current.firstChild) {
+      gridRef.current.removeChild(gridRef.current.firstChild);
+    }
+    
+    // Create grid lines with less intensive styling
+    const createLine = (start: [number, number], end: [number, number], color: string, delay: number) => {
+      const line = document.createElement('div');
+      const length = Math.sqrt(
+        Math.pow(end[0] - start[0], 2) + Math.pow(end[1] - start[1], 2)
+      );
+      const angle = Math.atan2(end[1] - start[1], end[0] - start[0]) * (180 / Math.PI);
+      
+      line.style.position = 'absolute';
+      line.style.width = `${length}px`;
+      line.style.height = '1px';
+      line.style.backgroundColor = color;
+      line.style.opacity = '0';
+      line.style.top = `${start[1]}px`;
+      line.style.left = `${start[0]}px`;
+      line.style.transform = `rotate(${angle}deg)`;
+      line.style.transformOrigin = '0 0';
+      line.style.transition = 'opacity 1s ease';
+      
+      // Animate line appearing with delay
+      setTimeout(() => {
+        if (line) {
+          line.style.opacity = '0.08'; // Lower opacity for subtlety
+        }
+      }, delay);
+      
+      return line;
+    };
+    
+    // Setup grid fragment to minimize DOM operations
+    const fragment = document.createDocumentFragment();
+    
+    // Add horizontal lines
+    for (let i = 0; i < 4; i++) { // Reduced from 5 to 4
+      const y = (height / 5) * (i + 1);
+      const line = createLine([0, y], [width, y], '#00f0ff', i * 200); // Slower appearance
+      fragment.appendChild(line);
+    }
+    
+    // Add vertical lines
+    for (let i = 0; i < 4; i++) { // Reduced from 5 to 4
+      const x = (width / 5) * (i + 1);
+      const line = createLine([x, 0], [x, height], '#ff00ff', 800 + i * 200); // Slower appearance
+      fragment.appendChild(line);
+    }
+    
+    // Add diagonal lines
+    for (let i = 0; i < 2; i++) { // Reduced from 3 to 2
+      const startX = (width / 3) * i;
+      const startY = 0;
+      const endX = width;
+      const endY = (height / 2) * (i + 1);
+      const line = createLine([startX, startY], [endX, endY], '#b967ff', 1600 + i * 200); // Slower appearance
+      fragment.appendChild(line);
+    }
+    
+    // Add all lines at once to minimize reflows
+    gridRef.current.appendChild(fragment);
+    setIsGridCreated(true);
+    
+    // Animation for random grid glitches - less frequent
+    const animateGridPulse = () => {
+      if (!gridRef.current) return;
+      
+      const lines = gridRef.current.childNodes;
+      if (lines.length === 0) return;
+      
+      const randomLine = lines[Math.floor(Math.random() * lines.length)] as HTMLDivElement;
+      
+      if (randomLine) {
+        randomLine.style.opacity = '0.25';
+        randomLine.style.filter = 'blur(0.5px)';
+        
+        setTimeout(() => {
+          if (randomLine) {
+            randomLine.style.opacity = '0.08'; // Back to normal opacity
+            randomLine.style.filter = 'blur(0)';
+          }
+        }, 400);
+      }
+      
+      pulseTimeoutId = setTimeout(animateGridPulse, Math.random() * 4000 + 2000); // Much less frequent
+    };
+    
+    let pulseTimeoutId = setTimeout(animateGridPulse, 3000); // Start after initial grid is visible
+    
+    // Handle resize events for responsive grid
+    const handleResize = () => {
+      if (containerRef.current && gridRef.current) {
+        const newBounds = containerRef.current.getBoundingClientRect();
+        if (Math.abs(newBounds.width - width) > 50 || Math.abs(newBounds.height - height) > 50) {
+          setIsGridCreated(false); // Mark for recreation on next cycle
+        }
+      }
+    };
+    
+    window.addEventListener('resize', handleResize);
+    
+    return () => {
+      clearTimeout(pulseTimeoutId);
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [isGridCreated]);
+
+  // Create grid on initial render, with IntersectionObserver
+  useEffect(() => {
+    if (!gridRef.current || !containerRef.current) return;
+    
+    // Use IntersectionObserver to only build grid when visible
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && !isGridCreated) {
+          // Delay grid creation for smoother initial appearance
+          setTimeout(() => {
+            createGrid();
+          }, 300);
+        }
+      });
+    }, { threshold: 0.2 }); // Only when 20% visible
+    
+    observer.observe(containerRef.current);
+    
+    return () => {
+      if (containerRef.current) {
+        observer.unobserve(containerRef.current);
+      }
+    };
+  }, [createGrid, isGridCreated]);
+
+  // Recreate grid when marked for recreation
+  useEffect(() => {
+    if (!isGridCreated) {
+      createGrid();
+    }
+  }, [isGridCreated, createGrid]);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
   };
-  
-  const handleSubmit = (e: React.FormEvent) => {
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
+    setSubmitStatus('idle');
     
-    // Simulate form submission
-    setTimeout(() => {
-      setIsSubmitting(false);
-      setIsSubmitted(true);
-      setFormData({ name: '', email: '', message: '' });
+    try {
+      // Send data to our API endpoint, which will save to Firebase
+      const response = await fetch('/api/contact', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(formData),
+      });
       
-      // Reset submission status after 5 seconds
-      setTimeout(() => {
-        setIsSubmitted(false);
-      }, 5000);
-    }, 1500);
+      const data = await response.json();
+      
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send message');
+      }
+      
+      // Reset form on success
+      setFormData({
+        name: '',
+        email: '',
+        subject: '',
+        message: ''
+      });
+      setSubmitStatus('success');
+    } catch (error) {
+      setSubmitStatus('error');
+      setErrorMessage(error instanceof Error ? error.message : 'An unexpected error occurred');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
-  
-  const socialLinks = [
-    { name: 'GitHub', icon: 'github', url: 'https://github.com' },
-    { name: 'LinkedIn', icon: 'linkedin', url: 'https://linkedin.com' },
-    { name: 'Twitter', icon: 'twitter', url: 'https://twitter.com' },
-    { name: 'Instagram', icon: 'instagram', url: 'https://instagram.com' },
-  ];
 
   return (
-    <section id="contact" className="py-20 relative overflow-hidden bg-cyber-dark">
-      {/* Cyberpunk grid background */}
-      <div className="absolute inset-0 z-0">
-        <svg width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#00f0ff" strokeWidth="0.5" opacity="0.1" />
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
-        </svg>
-      </div>
+    <section id="contact" className="relative py-20 bg-cyber-dark text-white overflow-hidden optimized-animations">
+      <SectionStars sectionId="contact" />
       
-      <div className="container mx-auto px-4 z-10 relative">
+      <div ref={containerRef} className="container mx-auto px-4 relative z-10" onMouseMove={handleMouseMove}>
         <motion.div
-          className="text-center mb-16"
           initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: "easeOut" }}
+          viewport={{ once: true, amount: 0.3 }}
+          className="max-w-4xl mx-auto relative motion-reduced"
         >
-          <h2 className="text-4xl font-cyber font-bold mb-6">
-            <span className="neon-text">Contact</span> Me
-          </h2>
-          <div className="w-24 h-1 bg-cyber-blue mx-auto mb-6"></div>
-          <p className="text-gray-300 text-lg max-w-2xl mx-auto font-future">
-            Have a project in mind or want to collaborate? Feel free to reach out and let's create something amazing together.
-          </p>
-        </motion.div>
-        
-        <div className="max-w-4xl mx-auto grid md:grid-cols-5 gap-8">
+          <div className="text-center mb-12">
+            <h2 className="text-4xl md:text-5xl font-cyber font-bold mb-4 relative inline-block hardware-accelerated">
+              <span className="relative z-10 text-transparent bg-clip-text bg-gradient-to-r from-cyber-blue to-cyber-pink">
+                C<span className="text-cyber-blue">0</span>NTACT
+              </span>
+              <div className="absolute inset-0 bg-cyber-blue opacity-20 blur-sm -z-10"></div>
+            </h2>
+            <div className="w-24 h-0.5 bg-gradient-to-r from-cyber-blue to-cyber-pink mx-auto my-6 relative">
+              <div className="absolute w-full h-full bg-cyber-blue opacity-50 blur-sm"></div>
+            </div>
+            <p className="text-gray-300 max-w-2xl mx-auto font-future">
+              Ready to connect? Drop me a transmission and I'll respond ASAP.
+            </p>
+          </div>
+          
+          <div ref={gridRef} className="absolute inset-0 pointer-events-none z-0 hardware-accelerated opacity-70"></div>
+          
           <motion.div 
-            className="md:col-span-3 cyber-border p-6 bg-cyber-black/40"
-            initial={{ opacity: 0, x: -30 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6 }}
+            className="cyber-border bg-cyber-black/80 backdrop-blur-md p-8 rounded relative overflow-hidden motion-reduced"
+            style={{ x: formX, y: formY }}
+            transition={{ type: "spring", stiffness: 50, damping: 20 }}
           >
-            {isSubmitted ? (
+            {/* Neon border glow effect */}
+            <div className="absolute inset-0 border border-cyber-blue opacity-40"></div>
+            <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-cyber-blue to-transparent shadow-neon-blue"></div>
+            <div className="absolute inset-x-0 bottom-0 h-px bg-gradient-to-r from-transparent via-cyber-pink to-transparent shadow-neon-pink"></div>
+            <div className="absolute inset-y-0 left-0 w-px bg-gradient-to-b from-transparent via-cyber-blue to-transparent shadow-neon-blue"></div>
+            <div className="absolute inset-y-0 right-0 w-px bg-gradient-to-b from-transparent via-cyber-pink to-transparent shadow-neon-pink"></div>
+            
+            {submitStatus === 'success' ? (
               <motion.div 
-                className="text-center py-12"
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ duration: 0.3 }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ duration: 0.5 }}
+                className="text-center py-8 relative z-10"
               >
-                <div className="mb-4 text-cyber-blue">
-                  <svg width="64" height="64" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="mx-auto">
-                    <path d="M22 11.0857V12.0057C21.9988 14.1621 21.3005 16.2604 20.0093 17.9875C18.7182 19.7147 16.9033 20.9782 14.8354 21.5896C12.7674 22.201 10.5573 22.1276 8.53447 21.3803C6.51168 20.633 4.78465 19.2518 3.61096 17.4428C2.43727 15.6338 1.87979 13.4938 2.02168 11.342C2.16356 9.19029 2.99721 7.14205 4.39828 5.5028C5.79935 3.86354 7.69279 2.72111 9.79619 2.24587C11.8996 1.77063 14.1003 1.98806 16.07 2.86572" stroke="#00f0ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    <path d="M22 4L12 14.01L9 11.01" stroke="#00f0ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                  </svg>
-                </div>
-                <h3 className="text-2xl font-cyber neon-text mb-2">Message Sent Successfully!</h3>
-                <p className="text-gray-300 font-future">Thank you for reaching out. I'll get back to you as soon as possible.</p>
+                <FiCheckCircle className="w-16 h-16 text-cyber-blue mx-auto mb-4" />
+                <h3 className="text-2xl font-cyber font-bold mb-2 text-cyber-blue">TRANSMISSION RECEIVED</h3>
+                <p className="text-gray-300 mb-6 font-future">Your message has been encrypted and stored. I'll decrypt it soon.</p>
+                <button
+                  onClick={() => setSubmitStatus('idle')}
+                  className="cyber-button inline-flex items-center"
+                >
+                  SEND NEW TRANSMISSION
+                </button>
               </motion.div>
             ) : (
-              <form onSubmit={handleSubmit}>
-                <h3 className="text-2xl font-cyber neon-text mb-6">Send a Message</h3>
+              <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div 
+                    className="relative"
+                    onMouseEnter={() => setHoverField('name')}
+                    onMouseLeave={() => setHoverField(null)}
+                  >
+                    <label htmlFor="name" className="block text-sm font-cyber text-gray-300 mb-1">
+                      NAME<span className="text-cyber-pink ml-1">:</span>
+                    </label>
+                    <div className={`relative ${hoverField === 'name' ? 'shadow-neon-blue' : ''} transition-shadow duration-300`}>
+                      <input
+                        type="text"
+                        id="name"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleChange}
+                        required
+                        className="w-full px-4 py-3 bg-cyber-black border border-cyber-blue/30 focus:border-cyber-blue rounded-none font-future text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyber-blue"
+                        placeholder="ENTER YOUR NAME"
+                      />
+                      {hoverField === 'name' && (
+                        <div className="absolute inset-0 border border-cyber-blue opacity-50 blur-[0.5px] -z-10"></div>
+                      )}
+                    </div>
+                  </div>
+                  
+                  <div 
+                    className="relative"
+                    onMouseEnter={() => setHoverField('email')}
+                    onMouseLeave={() => setHoverField(null)}
+                  >
+                    <label htmlFor="email" className="block text-sm font-cyber text-gray-300 mb-1">
+                      EMAIL<span className="text-cyber-pink ml-1">:</span>
+                    </label>
+                    <div className={`relative ${hoverField === 'email' ? 'shadow-neon-blue' : ''} transition-shadow duration-300`}>
+                      <input
+                        type="email"
+                        id="email"
+                        name="email"
+                        value={formData.email}
+                        onChange={handleChange}
+                        required
+                        className="w-full px-4 py-3 bg-cyber-black border border-cyber-blue/30 focus:border-cyber-blue rounded-none font-future text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyber-blue"
+                        placeholder="ENTER YOUR EMAIL"
+                      />
+                      {hoverField === 'email' && (
+                        <div className="absolute inset-0 border border-cyber-blue opacity-50 blur-[0.5px] -z-10"></div>
+                      )}
+                    </div>
+                  </div>
+                </div>
                 
-                <div className="mb-4">
-                  <label htmlFor="name" className="block text-gray-300 mb-2 font-future">Name</label>
-                  <div className="relative cyber-border">
+                <div 
+                  className="relative"
+                  onMouseEnter={() => setHoverField('subject')}
+                  onMouseLeave={() => setHoverField(null)}
+                >
+                  <label htmlFor="subject" className="block text-sm font-cyber text-gray-300 mb-1">
+                    SUBJECT<span className="text-cyber-pink ml-1">:</span>
+                  </label>
+                  <div className={`relative ${hoverField === 'subject' ? 'shadow-neon-blue' : ''} transition-shadow duration-300`}>
                     <input
                       type="text"
-                      id="name"
-                      name="name"
-                      value={formData.name}
+                      id="subject"
+                      name="subject"
+                      value={formData.subject}
                       onChange={handleChange}
-                      className="w-full px-4 py-2 bg-transparent text-white focus:outline-none font-future"
-                      required
+                      className="w-full px-4 py-3 bg-cyber-black border border-cyber-blue/30 focus:border-cyber-blue rounded-none font-future text-white placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-cyber-blue"
+                      placeholder="TRANSMISSION TOPIC"
                     />
+                    {hoverField === 'subject' && (
+                      <div className="absolute inset-0 border border-cyber-blue opacity-50 blur-[0.5px] -z-10"></div>
+                    )}
                   </div>
                 </div>
                 
-                <div className="mb-4">
-                  <label htmlFor="email" className="block text-gray-300 mb-2 font-future">Email</label>
-                  <div className="relative cyber-border">
-                    <input
-                      type="email"
-                      id="email"
-                      name="email"
-                      value={formData.email}
-                      onChange={handleChange}
-                      className="w-full px-4 py-2 bg-transparent text-white focus:outline-none font-future"
-                      required
-                    />
-                  </div>
-                </div>
-                
-                <div className="mb-6">
-                  <label htmlFor="message" className="block text-gray-300 mb-2 font-future">Message</label>
-                  <div className="relative cyber-border">
+                <div 
+                  className="relative"
+                  onMouseEnter={() => setHoverField('message')}
+                  onMouseLeave={() => setHoverField(null)}
+                >
+                  <label htmlFor="message" className="block text-sm font-cyber text-gray-300 mb-1">
+                    MESSAGE<span className="text-cyber-pink ml-1">:</span>
+                  </label>
+                  <div className={`relative ${hoverField === 'message' ? 'shadow-neon-blue' : ''} transition-shadow duration-300`}>
                     <textarea
                       id="message"
                       name="message"
                       value={formData.message}
                       onChange={handleChange}
-                      rows={5}
-                      className="w-full px-4 py-2 bg-transparent text-white focus:outline-none resize-none font-future"
                       required
+                      rows={5}
+                      className="w-full px-4 py-3 bg-cyber-black border border-cyber-blue/30 focus:border-cyber-blue rounded-none font-future text-white placeholder-gray-500 resize-none focus:outline-none focus:ring-1 focus:ring-cyber-blue"
+                      placeholder="COMPOSE YOUR MESSAGE HERE..."
                     ></textarea>
+                    {hoverField === 'message' && (
+                      <div className="absolute inset-0 border border-cyber-blue opacity-50 blur-[0.5px] -z-10"></div>
+                    )}
                   </div>
                 </div>
                 
-                <motion.button
-                  type="submit"
-                  className={`cyber-button ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}`}
-                  disabled={isSubmitting}
-                  whileHover={{ scale: isSubmitting ? 1 : 1.05 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 10 }}
-                >
-                  {isSubmitting ? 'Sending...' : 'Send Message'}
-                </motion.button>
+                {submitStatus === 'error' && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-cyber-black border border-cyber-pink text-cyber-pink px-4 py-3 rounded-none flex items-start"
+                  >
+                    <FiAlertCircle className="h-5 w-5 mr-2 mt-0.5" />
+                    <span className="font-future">ERROR: {errorMessage || 'Transmission failed. Please try again.'}</span>
+                  </motion.div>
+                )}
+                
+                <div className="text-right mt-8">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className={`cyber-button font-cyber inline-flex items-center relative overflow-hidden group ${isSubmitting ? 'opacity-70 cursor-not-allowed' : ''}`}
+                  >
+                    {isSubmitting ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-cyber-blue" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        PROCESSING...
+                      </>
+                    ) : (
+                      <>
+                        <FiSend className="mr-2" />
+                        TRANSMIT_MESSAGE
+                      </>
+                    )}
+                  </button>
+                </div>
               </form>
             )}
           </motion.div>
-          
-          <motion.div 
-            className="md:col-span-2"
-            initial={{ opacity: 0, x: 30 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.6, delay: 0.2 }}
-          >
-            <div className="cyber-border p-6 bg-cyber-black/40 mb-6">
-              <h3 className="text-2xl font-cyber neon-text-pink mb-6">Connect</h3>
-              
-              <div className="space-y-4 font-future">
-                <div className="flex items-center gap-3">
-                  <div className="text-cyber-pink">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M20 4H4C2.89543 4 2 4.89543 2 6V18C2 19.1046 2.89543 20 4 20H20C21.1046 20 22 19.1046 22 18V6C22 4.89543 21.1046 4 20 4Z" stroke="#ff00ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M22 7L13.03 12.7C12.7213 12.8934 12.3643 13.0001 12 13.0001C11.6357 13.0001 11.2787 12.8934 10.97 12.7L2 7" stroke="#ff00ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                  <span className="text-gray-300">contact@amriksingh.com</span>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                  <div className="text-cyber-pink">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M21.9999 16.9201V19.9201C22.0011 20.1986 21.944 20.4743 21.8324 20.7294C21.7209 20.9846 21.5572 21.2137 21.352 21.402C21.1468 21.5902 20.9045 21.7336 20.6407 21.8228C20.3769 21.912 20.0973 21.9452 19.8199 21.9201C16.7428 21.5857 13.7869 20.5342 11.1899 18.8501C8.77376 17.3148 6.72527 15.2663 5.18993 12.8501C3.49991 10.2413 2.44818 7.27109 2.11993 4.1801C2.09494 3.90356 2.12781 3.62486 2.21643 3.36172C2.30506 3.09859 2.4475 2.85679 2.63477 2.65172C2.82204 2.44665 3.05012 2.28281 3.30429 2.17062C3.55846 2.05843 3.8332 2.00036 4.10993 2.0001H7.10993C7.59524 1.99532 8.06572 2.16718 8.43369 2.48363C8.80166 2.80008 9.04201 3.23954 9.10993 3.7201C9.23656 4.68016 9.47138 5.62282 9.80993 6.5301C9.94448 6.88802 9.9736 7.27701 9.89384 7.65098C9.81408 8.02494 9.6288 8.36821 9.35993 8.6401L8.08993 9.9101C9.51349 12.4136 11.5864 14.4865 14.0899 15.9101L15.3599 14.6401C15.6318 14.3712 15.9751 14.1859 16.3491 14.1062C16.723 14.0264 17.112 14.0556 17.4699 14.1901C18.3772 14.5286 19.3199 14.7635 20.2799 14.8901C20.7657 14.9586 21.2093 15.2033 21.5265 15.5776C21.8436 15.9519 22.0121 16.4297 21.9999 16.9201Z" stroke="#ff00ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                  <span className="text-gray-300">+1 (555) 123-4567</span>
-                </div>
-                
-                <div className="flex items-center gap-3">
-                  <div className="text-cyber-pink">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M21 10C21 17 12 23 12 23C12 23 3 17 3 10C3 7.61305 3.94821 5.32387 5.63604 3.63604C7.32387 1.94821 9.61305 1 12 1C14.3869 1 16.6761 1.94821 18.364 3.63604C20.0518 5.32387 21 7.61305 21 10Z" stroke="#ff00ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                      <path d="M12 13C13.6569 13 15 11.6569 15 10C15 8.34315 13.6569 7 12 7C10.3431 7 9 8.34315 9 10C9 11.6569 10.3431 13 12 13Z" stroke="#ff00ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
-                    </svg>
-                  </div>
-                  <span className="text-gray-300">San Francisco, CA</span>
-                </div>
-              </div>
-            </div>
-            
-            <div className="cyber-border p-6 bg-cyber-black/40">
-              <h3 className="text-xl font-cyber neon-text-pink mb-4">Follow Me</h3>
-              
-              <div className="flex flex-wrap gap-4">
-                {socialLinks.map((social, index) => (
-                  <motion.a
-                    key={index}
-                    href={social.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-10 h-10 flex items-center justify-center border border-cyber-pink text-cyber-pink rounded-sm"
-                    whileHover={{ 
-                      scale: 1.1, 
-                      backgroundColor: 'rgba(255, 0, 255, 0.1)',
-                      boxShadow: '0 0 8px rgba(255, 0, 255, 0.5)'
-                    }}
-                    transition={{ duration: 0.2 }}
-                  >
-                    <span className="sr-only">{social.name}</span>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M12 0C5.374 0 0 5.374 0 12C0 18.626 5.374 24 12 24C18.626 24 24 18.626 24 12C24 5.374 18.626 0 12 0Z" fill="#ff00ff" fillOpacity="0.2"/>
-                      <text x="12" y="16" textAnchor="middle" fontSize="8" fill="#ff00ff">{social.icon[0].toUpperCase()}</text>
-                    </svg>
-                  </motion.a>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        </div>
-      </div>
-      
-      <div className="mt-20 border-t border-cyber-blue/20 pt-8">
-        <div className="container mx-auto px-4 text-center text-sm text-gray-400 font-future">
-          <p>© {new Date().getFullYear()} Amrik Singh. All Rights Reserved.</p>
-          <p className="mt-2">Designed and built with <span className="text-cyber-pink">♥</span></p>
-        </div>
+        </motion.div>
       </div>
     </section>
   );
-};
-
-export default Contact; 
+} 
