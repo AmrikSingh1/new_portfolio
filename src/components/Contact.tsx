@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, useMotionValue, useTransform } from 'framer-motion';
-import { FiSend, FiCheckCircle, FiAlertCircle } from 'react-icons/fi';
+import { FiSend } from 'react-icons/fi';
+import { FiCheckCircle } from 'react-icons/fi';
+import { FiAlertCircle } from 'react-icons/fi';
 import SectionStars from './SectionStars';
 
 export default function Contact() {
